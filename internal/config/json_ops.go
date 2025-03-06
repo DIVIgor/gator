@@ -15,6 +15,7 @@ type Config struct {
     User string `json:"current_user_name"`
 }
 
+
 func (c *Config) SetUser(username string) (err error) {
     c.User = username
 

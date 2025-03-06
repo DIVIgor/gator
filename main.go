@@ -1,26 +1,41 @@
 package main
 
 import (
-	"fmt"
 	"log"
+	"os"
 
 	"github.com/DIVIgor/gator/internal/config"
 )
+
+// App state
+type state struct {
+    cfg *config.Config
+}
 
 
 func main() {
 	cfg, err := config.Read()
 	if err != nil {
-		log.Fatal("error reading config: %v", err)
+		log.Fatal("error reading config: %w", err)
 	}
-	fmt.Printf("Read config: %+v\n", cfg)
 
-	err = cfg.SetUser("lane")
+	appState := &state{cfg: &cfg}
+
+	cmds := commands{cmdList: map[string]func(*state, command) error{}}
+	cmds.register("login", handlerLogin)
+
+	if len(os.Args) < 2 {
+		log.Fatal("not enough arguments")
+		return
+	}
+
+	cmd := command{
+		name: os.Args[1],
+		args: os.Args[2:],
+	}
 	
-
-	cfg, err = config.Read()
+	err = cmds.run(appState, cmd)
 	if err != nil {
-		log.Fatal("error reading config: %v", err)
+		log.Fatal(err)
 	}
-	fmt.Printf("Read config again: %+v\n", cfg)
 }
