@@ -1,15 +1,19 @@
 package main
 
 import (
+	"database/sql"
 	"log"
 	"os"
 
 	"github.com/DIVIgor/gator/internal/config"
+	"github.com/DIVIgor/gator/internal/database"
+	_ "github.com/lib/pq"
 )
 
 // App state
 type state struct {
     cfg *config.Config
+	db *database.Queries
 }
 
 
@@ -19,10 +23,26 @@ func main() {
 		log.Fatal("error reading config: %w", err)
 	}
 
-	appState := &state{cfg: &cfg}
+	// connect to the database
+	db, err := sql.Open("postgres", cfg.DbUrl)
+	if err != nil {
+		log.Fatalf("error connecting to database: %v", err)
+	}
+	defer db.Close()
+
+	dbQueries := database.New(db)
+
+	appState := &state{
+		cfg: &cfg,
+		db: dbQueries,
+	}
 
 	cmds := commands{cmdList: map[string]func(*state, command) error{}}
 	cmds.register("login", handlerLogin)
+	cmds.register("register", handlerRegister)
+	cmds.register("users", handlerUsers)
+	// clearing table command for tests
+	cmds.register("reset", handlerReset)
 
 	if len(os.Args) < 2 {
 		log.Fatal("not enough arguments")
