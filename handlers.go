@@ -79,6 +79,14 @@ func handlerUsers(s *state, cmd command) (err error) {
     return err
 }
 
+func handlerAgg(s *state, cmd command) (err error) {
+    feed, err := fetchFeed(s.client, context.Background(), "https://www.wagslane.dev/index.xml")
+    if err != nil {return}
+    fmt.Print(feed)
+
+    return err
+}
+
 // reset users table FOR TEST PURPOSES
 func handlerReset(s *state, cmd command) (err error) {
     err = s.db.ClearUsers(context.Background())
