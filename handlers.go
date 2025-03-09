@@ -79,10 +79,68 @@ func handlerUsers(s *state, cmd command) (err error) {
     return err
 }
 
+// Fetch feed by URL
 func handlerAgg(s *state, cmd command) (err error) {
     feed, err := fetchFeed(s.client, context.Background(), "https://www.wagslane.dev/index.xml")
     if err != nil {return}
     fmt.Print(feed)
+
+    return err
+}
+
+// Add feed to DB
+func handlerAddFeed(s *state, cmd command) (err error) {
+    if len(cmd.args) < 2 {
+        return fmt.Errorf("%s has not enough arguments", cmd.name)
+    }
+
+    user, err := s.db.GetUser(context.Background(), s.cfg.User)
+    if err != nil {return}
+
+    feed, err := s.db.CreateFeed(context.Background(), database.CreateFeedParams{
+        Name: cmd.args[0],
+        Url: cmd.args[1],
+        UserID: user.ID,
+        CreatedAt: time.Now().UTC(),
+        UpdatedAt: time.Now().UTC(),
+    })
+    if err != nil {
+        return fmt.Errorf("couldn't create feed: %w", err)
+    }
+
+    printFeed(feed.ID, feed.Name, feed.Url, user.Name, feed.CreatedAt, feed.UpdatedAt)
+    fmt.Println("==============================")
+
+    return err
+}
+
+// Takes specific values instead of struct to reduce number of DB calls
+func printFeed(id int32, name, url, username string, created, updated time.Time) {
+    fmt.Println("* ID:", id)
+	fmt.Println("* Created:", created)
+	fmt.Println("* Updated:", updated)
+	fmt.Println("* Name:", name)
+	fmt.Println("* URL:", url)
+    fmt.Println("* User:", username)
+}
+
+// Get all the feeds from DB
+func handlerGetFeeds(s *state, cmd command) (err error) {
+    feeds, err := s.db.GetFeeds(context.Background())
+    if err != nil {
+        return fmt.Errorf("couldn't get feeds: %w", err)
+    }
+
+    if len(feeds) == 0 {
+		fmt.Println("No feeds found")
+		return err
+	}
+
+    fmt.Printf("Found %d feeds:\n", len(feeds))
+    for _, feed := range feeds {
+        printFeed(feed.ID, feed.Name, feed.Url, feed.Username, feed.CreatedAt, feed.UpdatedAt)
+        fmt.Println("==============================")
+    }
 
     return err
 }
