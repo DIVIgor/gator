@@ -42,6 +42,7 @@ func main() {
 		db: dbQueries,
 	}
 
+	// Command registry
 	cmds := commands{cmdList: map[string]func(*state, command) error{}}
 	cmds.register("login", handlerLogin)
 	cmds.register("register", handlerRegister)
@@ -49,6 +50,8 @@ func main() {
 	cmds.register("agg", handlerAgg)
 	cmds.register("addfeed", handlerAddFeed)
 	cmds.register("feeds", handlerGetFeeds)
+	cmds.register("follow", handlerFollow)
+	cmds.register("following", handlerFollowing)
 	// clearing table command for tests
 	cmds.register("reset", handlerReset)
 

@@ -108,6 +108,16 @@ func handlerAddFeed(s *state, cmd command) (err error) {
         return fmt.Errorf("couldn't create feed: %w", err)
     }
 
+    _, err = s.db.CreateFeedFollow(context.Background(), database.CreateFeedFollowParams{
+        UserID: user.ID,
+        FeedID: feed.ID,
+        CreatedAt: time.Now().UTC(),
+        UpdatedAt: time.Now().UTC(),
+    })
+    if err != nil {
+        return fmt.Errorf("couldn't create feed follow: %w", err)
+    }
+
     printFeed(feed.ID, feed.Name, feed.Url, user.Name, feed.CreatedAt, feed.UpdatedAt)
     fmt.Println("==============================")
 
@@ -140,6 +150,53 @@ func handlerGetFeeds(s *state, cmd command) (err error) {
     for _, feed := range feeds {
         printFeed(feed.ID, feed.Name, feed.Url, feed.Username, feed.CreatedAt, feed.UpdatedAt)
         fmt.Println("==============================")
+    }
+
+    return err
+}
+
+// Create a new feed follow record for the current user
+func handlerFollow(s *state, cmd command) (err error) {
+    if len(cmd.args) < 1 {
+        return fmt.Errorf("%s has not enough arguments", cmd.name)
+    }
+
+    user, err := s.db.GetUser(context.Background(), s.cfg.User)
+    if err != nil {return}
+
+    feed, err := s.db.GetFeed(context.Background(), cmd.args[0])
+    if err != nil {return}
+
+    followedFeed, err := s.db.CreateFeedFollow(context.Background(), database.CreateFeedFollowParams{
+        UserID: user.ID,
+        FeedID: feed.ID,
+        CreatedAt: time.Now().UTC(),
+        UpdatedAt: time.Now().UTC(),
+    })
+
+    fmt.Println("You are now following:")
+    fmt.Println("Feed:", followedFeed.FeedName)
+    fmt.Println("User:", followedFeed.UserName)
+
+    return err
+}
+
+// Print all the names of the feeds the current user is following
+func handlerFollowing(s *state, cmd command) (err error) {
+    user, err := s.db.GetUser(context.Background(), s.cfg.User)
+    if err != nil {return}
+
+    followedFeeds, err := s.db.GetFeedFollowsForUser(context.Background(), user.ID)
+    if err != nil {return}
+
+    if len(followedFeeds) == 0 {
+        fmt.Println("No following feeds.")
+        return err
+    }
+
+    fmt.Println("Your followed feeds:")
+    for _, feed := range followedFeeds {
+        fmt.Println("*", feed.FeedName)
     }
 
     return err

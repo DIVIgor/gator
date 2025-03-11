@@ -8,3 +8,8 @@ SELECT f.id, f.name, url, u.name AS username, f.created_at, f.updated_at
 FROM feeds f
 JOIN users u
 ON f.user_id = u.id;
+
+-- name: GetFeed :one
+SELECT *
+FROM feeds
+WHERE url = $1;
