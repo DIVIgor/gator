@@ -175,6 +175,17 @@ func handlerFollow(s *state, cmd command, user database.User) (err error) {
     return err
 }
 
+func handlerUnfollow(s *state, cmd command, user database.User) (err error) {
+    if len(cmd.args) < 1 {
+        return fmt.Errorf("%s has not enough arguments", cmd.name)
+    }
+
+    return s.db.DeleteFeedFollow(context.Background(), database.DeleteFeedFollowParams{
+        UserID: user.ID,
+        Url: cmd.args[0],
+    })
+}
+
 // Print all the names of the feeds the current user is following
 func handlerFollowing(s *state, cmd command, user database.User) (err error) {
     followedFeeds, err := s.db.GetFeedFollowsForUser(context.Background(), user.ID)
