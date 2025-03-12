@@ -7,6 +7,7 @@ package database
 
 import (
 	"context"
+	"database/sql"
 	"time"
 
 	"github.com/google/uuid"
@@ -118,4 +119,37 @@ func (q *Queries) GetFeedFollowsForUser(ctx context.Context, userID uuid.UUID) (
 		return nil, err
 	}
 	return items, nil
+}
+
+const getNextToFetch = `-- name: GetNextToFetch :one
+SELECT f.id, name, url, f.created_at, f.updated_at, last_fetched_at
+FROM feeds f
+JOIN feed_follows ff
+ON f.id = ff.feed_id
+WHERE ff.user_id = $1
+ORDER BY last_fetched_at
+LIMIT 1
+`
+
+type GetNextToFetchRow struct {
+	ID            int32
+	Name          string
+	Url           string
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+	LastFetchedAt sql.NullTime
+}
+
+func (q *Queries) GetNextToFetch(ctx context.Context, userID uuid.UUID) (GetNextToFetchRow, error) {
+	row := q.db.QueryRowContext(ctx, getNextToFetch, userID)
+	var i GetNextToFetchRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Url,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.LastFetchedAt,
+	)
+	return i, err
 }

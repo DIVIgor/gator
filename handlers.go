@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"time"
@@ -80,10 +81,43 @@ func handlerUsers(s *state, cmd command) (err error) {
 }
 
 // Fetch feed by URL
-func handlerAgg(s *state, cmd command) (err error) {
-    feed, err := fetchFeed(s.client, context.Background(), "https://www.wagslane.dev/index.xml")
+func handlerAgg(s *state, cmd command, user database.User) (err error) {
+    if len(cmd.args) < 1 {return}
+
+    requestDelay, err := time.ParseDuration(cmd.args[0])
     if err != nil {return}
-    fmt.Print(feed)
+
+    fmt.Printf("Collecting feeds every %s\n", cmd.args[0])
+
+    ticker := time.NewTicker(requestDelay)
+    for ; ; <-ticker.C {
+        scrapeFeeds(s, user)
+    }
+}
+
+// Feed aggregation
+func scrapeFeeds(s *state, user database.User) (err error) {
+    // get the latest/unfetched feed
+    nextFeed, err := s.db.GetNextToFetch(context.Background(), user.ID)
+    if err != nil {return}
+
+    // mark the feed as fetched or update fetched time
+    err = s.db.MarkFeedFetched(context.Background(), database.MarkFeedFetchedParams{
+        ID: nextFeed.ID,
+        UpdatedAt: time.Now().UTC(),
+        LastFetchedAt: sql.NullTime{Time: time.Now().UTC()},
+    })
+    if err != nil {return}
+
+    // fetch the feed
+    feed, err := fetchFeed(s.client, context.Background(), nextFeed.Url)
+    if err != nil {return}
+
+    fmt.Println(feed.Channel.Title, "feed:")
+    for idx, el := range feed.Channel.Item {
+        fmt.Println(idx + 1, el.Title)
+    }
+    fmt.Println("=============================================")
 
     return err
 }

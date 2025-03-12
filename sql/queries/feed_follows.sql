@@ -26,3 +26,13 @@ WHERE feed_follows.user_id = $1 AND feed_id IN (
     FROM feeds
     WHERE feeds.url = $2
 );
+
+
+-- name: GetNextToFetch :one
+SELECT f.id, name, url, f.created_at, f.updated_at, last_fetched_at
+FROM feeds f
+JOIN feed_follows ff
+ON f.id = ff.feed_id
+WHERE ff.user_id = $1
+ORDER BY last_fetched_at
+LIMIT 1;
