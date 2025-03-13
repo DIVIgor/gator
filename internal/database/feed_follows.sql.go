@@ -127,7 +127,7 @@ FROM feeds f
 JOIN feed_follows ff
 ON f.id = ff.feed_id
 WHERE ff.user_id = $1
-ORDER BY last_fetched_at
+ORDER BY last_fetched_at NULLS FIRST
 LIMIT 1
 `
 

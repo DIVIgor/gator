@@ -2,9 +2,9 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/DIVIgor/gator/internal/database"
@@ -82,12 +82,16 @@ func handlerUsers(s *state, cmd command) (err error) {
 
 // Fetch feed by URL
 func handlerAgg(s *state, cmd command, user database.User) (err error) {
-    if len(cmd.args) < 1 {return}
+    if len(cmd.args) < 1 {
+        return fmt.Errorf("%s has not enough arguments", cmd.name)
+    }
 
     requestDelay, err := time.ParseDuration(cmd.args[0])
-    if err != nil {return}
+    if err != nil {
+        return fmt.Errorf("invalid duration: %w", err)
+    }
 
-    fmt.Printf("Collecting feeds every %s\n", cmd.args[0])
+    log.Printf("Collecting feeds every %s", requestDelay)
 
     ticker := time.NewTicker(requestDelay)
     for ; ; <-ticker.C {
@@ -95,31 +99,39 @@ func handlerAgg(s *state, cmd command, user database.User) (err error) {
     }
 }
 
-// Feed aggregation
-func scrapeFeeds(s *state, user database.User) (err error) {
-    // get the latest/unfetched feed
-    nextFeed, err := s.db.GetNextToFetch(context.Background(), user.ID)
-    if err != nil {return}
-
+// Scrape a feed and print its details
+func scrapeFeed(s *state, nextFeed database.GetNextToFetchRow) {
     // mark the feed as fetched or update fetched time
-    err = s.db.MarkFeedFetched(context.Background(), database.MarkFeedFetchedParams{
-        ID: nextFeed.ID,
-        UpdatedAt: time.Now().UTC(),
-        LastFetchedAt: sql.NullTime{Time: time.Now().UTC()},
-    })
-    if err != nil {return}
+    err := s.db.MarkFeedFetched(context.Background(), nextFeed.ID)
+    if err != nil {
+        log.Printf("Couldn't mark feed %s fetched: %v", nextFeed.Name, err)
+        return
+    }
 
     // fetch the feed
     feed, err := fetchFeed(s.client, context.Background(), nextFeed.Url)
-    if err != nil {return}
+    if err != nil {
+        log.Printf("Couldn't collect feed %s: %v", nextFeed.Name, err)
+        return
+    }
 
-    fmt.Println(feed.Channel.Title, "feed:")
+    log.Printf("Feed %s collected. Found %v posts:", feed.Channel.Title, len(feed.Channel.Item))
     for idx, el := range feed.Channel.Item {
-        fmt.Println(idx + 1, el.Title)
+        fmt.Printf("%d. %s\n", idx + 1, el.Title)
     }
     fmt.Println("=============================================")
+}
 
-    return err
+// Feed aggregation
+func scrapeFeeds(s *state, user database.User) {
+    // get the latest/unfetched feed
+    nextFeed, err := s.db.GetNextToFetch(context.Background(), user.ID)
+    if err != nil {
+        log.Println("Couldn't get next feeds to fetch", err)
+        return
+    }
+
+    scrapeFeed(s, nextFeed)
 }
 
 // Add feed to DB
