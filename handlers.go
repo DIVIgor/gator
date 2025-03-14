@@ -2,14 +2,21 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"log"
+	"strconv"
 	"time"
 
 	"github.com/DIVIgor/gator/internal/database"
 	"github.com/google/uuid"
 )
+
+
+const outputTimeFormat string = "02-Jan-2006 at 15:04"
+const printDelimiter string = "=============================================================================================================="
+
 
 // set current user using an argument from CLI
 func handlerLogin(s *state, cmd command) (err error) {
@@ -99,6 +106,26 @@ func handlerAgg(s *state, cmd command, user database.User) (err error) {
     }
 }
 
+// Parse scraped timestamp from feed entries
+func parseTime(timeStr string) (parsedTime time.Time, err error) {
+    // timestamps
+    tsLayouts := []string{
+        time.RFC1123,
+        time.RFC822,
+        time.RFC3339,
+        "2006-01-02T15:04:05",
+    }
+
+    for _, ts := range tsLayouts {
+        parsedTime, err = time.Parse(ts, timeStr)
+        if err == nil {
+            return parsedTime, err
+        }
+    }
+
+    return time.Time{}, fmt.Errorf("unable to parse time: %s", timeStr)
+}
+
 // Scrape a feed and print its details
 func scrapeFeed(s *state, nextFeed database.GetNextToFetchRow) {
     // mark the feed as fetched or update fetched time
@@ -115,11 +142,63 @@ func scrapeFeed(s *state, nextFeed database.GetNextToFetchRow) {
         return
     }
 
-    log.Printf("Feed %s collected. Found %v posts:", feed.Channel.Title, len(feed.Channel.Item))
-    for idx, el := range feed.Channel.Item {
-        fmt.Printf("%d. %s\n", idx + 1, el.Title)
+    log.Printf("Feed %s collected. Found %v posts.", feed.Channel.Title, len(feed.Channel.Item))
+    for _, el := range feed.Channel.Item {
+        parsedTime, err := parseTime(el.PubDate)
+        if err != nil {return}
+
+        _, err = s.db.CreatePost(context.Background(), database.CreatePostParams{
+            Title: el.Title,
+            Url: el.Link,
+            Description: sql.NullString{
+                String: el.Description,
+                Valid: true,
+            },
+            PublishedAt: parsedTime,  // probably may be NULL
+            FeedID: nextFeed.ID,
+            CreatedAt: time.Now().UTC(),
+            UpdatedAt: time.Now().UTC(),
+        })
+
+        if err != nil && err.Error() == "pq: duplicate key value violates unique constraint \"posts_url_key\"" {
+            continue
+        }
+        if err != nil {
+            log.Println(err)
+            return
+        }
     }
-    fmt.Println("=============================================")
+}
+
+// Browse saved posts
+func handlerBrowsePosts(s *state, cmd command, user database.User) (err error) {
+    postLimit := 2
+    if len(cmd.args) > 0 {
+        postLimit, err = strconv.Atoi(cmd.args[0])
+        if err != nil {
+            log.Println(err)
+            return fmt.Errorf("invalid limit: %w", err)
+        }
+    }
+
+    posts, err := s.db.GetPostsForUser(context.Background(), database.GetPostsForUserParams{
+        UserID: user.ID,
+        Limit: int32(postLimit),
+    })
+    if err != nil {
+        return fmt.Errorf("couldn't get posts for user: %w", err)
+    }
+
+    for _, post := range posts {
+        fmt.Println("Title:", post.Title, "|", "Published at:", post.PublishedAt.Format(outputTimeFormat))
+        if post.Description.Valid {
+            fmt.Println("Description")
+            fmt.Println(post.Description.String)
+        }
+        fmt.Println(printDelimiter)
+    }
+
+    return err
 }
 
 // Feed aggregation
@@ -161,20 +240,20 @@ func handlerAddFeed(s *state, cmd command, user database.User) (err error) {
         return fmt.Errorf("couldn't create feed follow: %w", err)
     }
 
-    printFeed(feed.ID, feed.Name, feed.Url, user.Name, feed.CreatedAt, feed.UpdatedAt)
-    fmt.Println("==============================")
+    printFeed(feed)
+    fmt.Println(printDelimiter)
 
     return err
 }
 
-// Takes specific values instead of struct to reduce number of DB calls
-func printFeed(id int32, name, url, username string, created, updated time.Time) {
-    fmt.Println("* ID:", id)
-	fmt.Println("* Created:", created)
-	fmt.Println("* Updated:", updated)
-	fmt.Println("* Name:", name)
-	fmt.Println("* URL:", url)
-    fmt.Println("* User:", username)
+// Print general info on a given feed
+func printFeed(feed database.Feed) {
+    fmt.Println("* ID:", feed.ID)
+	fmt.Println("* Created:", feed.CreatedAt.Format(outputTimeFormat))
+	fmt.Println("* Updated:", feed.UpdatedAt.Format(outputTimeFormat))
+	fmt.Println("* Name:", feed.Name)
+	fmt.Println("* URL:", feed.Url)
+    fmt.Println("* Last Fetched At:", feed.LastFetchedAt.Time.Format(outputTimeFormat))
 }
 
 // Get all the feeds from DB
@@ -191,8 +270,8 @@ func handlerGetFeeds(s *state, cmd command) (err error) {
 
     fmt.Printf("Found %d feeds:\n", len(feeds))
     for _, feed := range feeds {
-        printFeed(feed.ID, feed.Name, feed.Url, feed.Username, feed.CreatedAt, feed.UpdatedAt)
-        fmt.Println("==============================")
+        printFeed(feed)
+        fmt.Println(printDelimiter)
     }
 
     return err

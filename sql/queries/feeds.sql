@@ -4,10 +4,8 @@ VALUES ($1, $2, $3, $4, $5)
 RETURNING *;
 
 -- name: GetFeeds :many
-SELECT f.id, f.name, url, u.name AS username, f.created_at, f.updated_at
-FROM feeds f
-JOIN users u
-ON f.user_id = u.id;
+SELECT *
+FROM feeds;
 
 -- name: GetFeed :one
 SELECT *
